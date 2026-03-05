@@ -826,9 +826,8 @@ write_config(){
 
   local CRT="$CERT_DIR/fullchain.pem" KEY="$CERT_DIR/key.pem"
   jq -n \
+  --arg GHOST "127.0.0.1" --argjson GPORT "1122" \
   --arg RS "$REALITY_SERVER" --argjson RSP "${REALITY_SERVER_PORT:-443}" --arg UID "$UUID" \
-  # ... 在这里添加下面两行 ...
-  --arg GHOST "127.0.0.1" --argjson GPORT 1122 \
   --arg WSHOST "$WARP_SOCKS_HOST" --argjson WSPORT "$WARP_SOCKS_PORT" \
   --arg RPR "$REALITY_PRIV" --arg RPB "$REALITY_PUB" --arg SID "$REALITY_SID" \
   --arg HY2 "$HY2_PWD" --arg HY22 "$HY2_PWD2" --arg HY2O "$HY2_OBFS_PWD" \
