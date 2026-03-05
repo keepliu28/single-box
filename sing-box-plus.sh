@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
 #  Sing-Box-Plus 管理脚本（18 节点：直连 9 + WARP 9）
-#  Version: v3.2.0
-#  author：Alvin9999
-#  Repo: https://github.com/Alvin9999-newpac/Sing-Box-Plus
+#  Version: v3.2.0-Fixed
+#  集成 Gemini 自动解锁分流逻辑
 # ============================================================
 
 set -Eeuo pipefail
@@ -826,7 +825,7 @@ write_config(){
   [[ "$ENABLE_WARP" == "true" ]] && ensure_warpcli_proxy
 
   local CRT="$CERT_DIR/fullchain.pem" KEY="$CERT_DIR/key.pem"
-  # 这里是你之前调通的 Wireproxy 端口
+  # 这里的 1122 是你 VPS 上工作的 Wireproxy 端口
   local GEMINI_FIX_PORT=1122 
 
   jq -n \
@@ -845,6 +844,7 @@ write_config(){
   --argjson PW7 "$PORT_SS2022_W" --argjson PW8 "$PORT_SS_W" --argjson PW9 "$PORT_TUIC_W" \
   --arg ENABLE_WARP "$ENABLE_WARP" \
   '
+  # --- 函数定义：参数间必须用分号 ; ---
   def inbound_vless($port): {type:"vless", listen:"::", listen_port:$port, users:[{uuid:$UID}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
   def inbound_vless_flow($port): {type:"vless", listen:"::", listen_port:$port, users:[{uuid:$UID, flow:"xtls-rprx-vision"}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
   def inbound_trojan($port): {type:"trojan", listen:"::", listen_port:$port, users:[{password:$UID}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
@@ -871,9 +871,9 @@ write_config(){
       (inbound_vless_flow($P1) + {tag:"vless-reality"}),
       (inbound_vless($P2) + {tag:"vless-grpcr", transport:{type:"grpc", service_name:$GRPC}}),
       (inbound_trojan($P3) + {tag:"trojan-reality"}),
-      (inbound_hy2($P4, $HY2) + {tag:"hy2"}),
+      (inbound_hy2($P4; $HY2) + {tag:"hy2"}),
       (inbound_vmess_ws($P5) + {tag:"vmess-ws"}),
-      (inbound_hy2_obfs($P6, $HY22, $HY2O) + {tag:"hy2-obfs"}),
+      (inbound_hy2_obfs($P6; $HY22; $HY2O) + {tag:"hy2-obfs"}),
       (inbound_ss2022($P7) + {tag:"ss2022"}),
       (inbound_ss($P8) + {tag:"ss"}),
       (inbound_tuic($P9) + {tag:"tuic-v5"}),
@@ -881,9 +881,9 @@ write_config(){
       (inbound_vless_flow($PW1) + {tag:"vless-reality-warp"}),
       (inbound_vless($PW2) + {tag:"vless-grpcr-warp", transport:{type:"grpc", service_name:$GRPC}}),
       (inbound_trojan($PW3) + {tag:"trojan-reality-warp"}),
-      (inbound_hy2($PW4, $HY2) + {tag:"hy2-warp"}),
+      (inbound_hy2($PW4; $HY2) + {tag:"hy2-warp"}),
       (inbound_vmess_ws($PW5) + {tag:"vmess-ws-warp"}),
-      (inbound_hy2_obfs($PW6, $HY22, $HY2O) + {tag:"hy2-obfs-warp"}),
+      (inbound_hy2_obfs($PW6; $HY22; $HY2O) + {tag:"hy2-obfs-warp"}),
       (inbound_ss2022($PW7) + {tag:"ss2022-warp"}),
       (inbound_ss($PW8) + {tag:"ss-warp"}),
       (inbound_tuic($PW9) + {tag:"tuic-v5-warp"})
@@ -901,28 +901,6 @@ write_config(){
           "domain": [
             "generativelanguage.googleapis.com", 
             "palm.googleapis.com",
-            "gemini.google.com",
-            "proactivebackend-pa.googleapis.com",
-            "google-api-soft-token-helper.googleapis.com",
-            "googleai.googleapis.com"
-          ], 
-          "outbound": "gemini-fix" 
-        },
-        { "domain_keyword": ["generativelanguage", "gemini"], "outbound": "gemini-fix" },
-        { 
-          inbound: [
-            "vless-reality-warp", "vless-grpcr-warp", "trojan-reality-warp",
-            "hy2-warp", "vmess-ws-warp", "hy2-obfs-warp",
-            "ss2022-warp", "ss-warp", "tuic-v5-warp"
-          ], 
-          outbound:"warp" 
-        }
-      ],
-      final:"direct"
-    }
-  }' > "$CONF_JSON"
-  save_env
-}
 
 # ===== 防火墙 =====
 open_firewall(){
