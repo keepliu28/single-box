@@ -848,9 +848,9 @@ write_config(){
   def inbound_vless($port): {type:"vless", listen:"::", listen_port:$port, users:[{uuid:$UID}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
   def inbound_vless_flow($port): {type:"vless", listen:"::", listen_port:$port, users:[{uuid:$UID, flow:"xtls-rprx-vision"}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
   def inbound_trojan($port): {type:"trojan", listen:"::", listen_port:$port, users:[{password:$UID}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
-  def inbound_hy2($port, $pwd): {type:"hysteria2", listen:"::", listen_port:$port, users:[{password:$pwd}], tls:{enabled:true, certificate_path:$CRT, key_path:$KEY}};
+  def inbound_hy2($port; $pwd): {type:"hysteria2", listen:"::", listen_port:$port, users:[{password:$pwd}], tls:{enabled:true, certificate_path:$CRT, key_path:$KEY}};
   def inbound_vmess_ws($port): {type:"vmess", listen:"::", listen_port:$port, users:[{uuid:$UID}], transport:{type:"ws", path:$VMWS}};
-  def inbound_hy2_obfs($port, $pwd, $obfs): {type:"hysteria2", listen:"::", listen_port:$port, users:[{password:$pwd}], obfs:{type:"salamander", password:$obfs}, tls:{enabled:true, certificate_path:$CRT, key_path:$KEY, alpn:["h3"]}};
+  def inbound_hy2_obfs($port; $pwd; $obfs): {type:"hysteria2", listen:"::", listen_port:$port, users:[{password:$pwd}], obfs:{type:"salamander", password:$obfs}, tls:{enabled:true, certificate_path:$CRT, key_path:$KEY, alpn:["h3"]}};
   def inbound_ss2022($port): {type:"shadowsocks", listen:"::", listen_port:$port, method:"2022-blake3-aes-256-gcm", password:$SS2022};
   def inbound_ss($port): {type:"shadowsocks", listen:"::", listen_port:$port, method:"aes-256-gcm", password:$SSPWD};
   def inbound_tuic($port): {type:"tuic", listen:"::", listen_port:$port, users:[{uuid:$TUICUUID, password:$TUICPWD}], congestion_control:"bbr", tls:{enabled:true, certificate_path:$CRT, key_path:$KEY, alpn:["h3"]}};
