@@ -858,6 +858,8 @@ write_config(){
   def warp_outbound:
     {type:"socks", tag:"warp", server:$WSHOST, server_port:$WSPORT};
 
+  def gemini_outbound:
+    {type:"socks", tag:"gemini-fix", server:"127.0.0.1", server_port:1122};
 
   {
     log:{level:"info", timestamp:true},
@@ -883,18 +885,28 @@ write_config(){
       (inbound_ss($PW8) + {tag:"ss-warp"}),
       (inbound_tuic($PW9) + {tag:"tuic-v5-warp"})
     ],
-    outbounds: (
+	outbounds: (
       if $ENABLE_WARP=="true" and ($WPRIV|length)>0 and ($WHOST|length)>0 then
-        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}, warp_outbound]
+        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}, warp_outbound, gemini_outbound] # 这里加了 gemini_outbound
       else
-        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}]
+        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}, gemini_outbound] # 这里也加上，确保万无一失
       end
     ),
     route: (
       if $ENABLE_WARP=="true" and ($WPRIV|length)>0 and ($WHOST|length)>0 then
-        { default_domain_resolver:"dns-remote", rules:[
-            { inbound: ["vless-reality-warp","vless-grpcr-warp","trojan-reality-warp","hy2-warp","vmess-ws-warp","hy2-obfs-warp","ss2022-warp","ss-warp","tuic-v5-warp"], outbound:"warp" }
-          ],
+		{ default_domain_resolver:"dns-remote", rules:[
+					{ 
+					  "domain": [
+						"generativelanguage.googleapis.com", 
+						"palm.googleapis.com",
+						"gemini.google.com",
+						"proactivebackend-pa.googleapis.com",
+						"google-api-soft-token-helper.googleapis.com"
+					  ], 
+					  "outbound": "gemini-fix" 
+					},
+					{ inbound: ["vless-reality-warp", ...], outbound:"warp" }
+				  ],
           final:"direct"
         }
       else
