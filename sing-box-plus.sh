@@ -827,6 +827,8 @@ write_config(){
   local CRT="$CERT_DIR/fullchain.pem" KEY="$CERT_DIR/key.pem"
   jq -n \
   --arg RS "$REALITY_SERVER" --argjson RSP "${REALITY_SERVER_PORT:-443}" --arg UID "$UUID" \
+  # ... 在这里添加下面两行 ...
+  --arg GHOST "127.0.0.1" --argjson GPORT 1122 \
   --arg WSHOST "$WARP_SOCKS_HOST" --argjson WSPORT "$WARP_SOCKS_PORT" \
   --arg RPR "$REALITY_PRIV" --arg RPB "$REALITY_PUB" --arg SID "$REALITY_SID" \
   --arg HY2 "$HY2_PWD" --arg HY22 "$HY2_PWD2" --arg HY2O "$HY2_OBFS_PWD" \
@@ -856,6 +858,7 @@ write_config(){
 
   def warp_outbound:
     {type:"socks", tag:"warp", server:$WSHOST, server_port:$WSPORT};
+  def gemini_proxy: {type:"socks", tag:"gemini-bypass", server:$GHOST, server_port:$GPORT};
 
 
   {
@@ -882,24 +885,13 @@ write_config(){
       (inbound_ss($PW8) + {tag:"ss-warp"}),
       (inbound_tuic($PW9) + {tag:"tuic-v5-warp"})
     ],
-    outbounds: (
-      if $ENABLE_WARP=="true" and ($WPRIV|length)>0 and ($WHOST|length)>0 then
-        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}, warp_outbound]
-      else
-        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}]
-      end
-    ),
-    route: (
-      if $ENABLE_WARP=="true" and ($WPRIV|length)>0 and ($WHOST|length)>0 then
-        { default_domain_resolver:"dns-remote", rules:[
-            { inbound: ["vless-reality-warp","vless-grpcr-warp","trojan-reality-warp","hy2-warp","vmess-ws-warp","hy2-obfs-warp","ss2022-warp","ss-warp","tuic-v5-warp"], outbound:"warp" }
-          ],
-          final:"direct"
-        }
-      else
-        { final:"direct" }
-      end
-    )
+    outbounds: ([{type:"direct", tag:"direct"}, {type:"block", tag:"block"}, gemini_proxy] + (if $ENABLE_WARP=="true" then [warp_outbound] else [] end)),
+	rules:[
+        { domain_keyword: ["gemini", "generativelanguage", "ai.google"], outbound: "gemini-bypass" },
+        { inbound: ["vless-reality-warp", "hy2-warp", "ss-warp"], outbound: "warp" } # 示例缩减
+      ],
+      final:"direct"
+    }
   }' > "$CONF_JSON"
   save_env
 }
