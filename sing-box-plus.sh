@@ -826,9 +826,13 @@ write_config(){
   [[ "$ENABLE_WARP" == "true" ]] && ensure_warpcli_proxy
 
   local CRT="$CERT_DIR/fullchain.pem" KEY="$CERT_DIR/key.pem"
+  # 这里是你之前调通的 Wireproxy 端口
+  local GEMINI_FIX_PORT=1122 
+
   jq -n \
   --arg RS "$REALITY_SERVER" --argjson RSP "${REALITY_SERVER_PORT:-443}" --arg UID "$UUID" \
   --arg WSHOST "$WARP_SOCKS_HOST" --argjson WSPORT "$WARP_SOCKS_PORT" \
+  --argjson GPORT "$GEMINI_FIX_PORT" \
   --arg RPR "$REALITY_PRIV" --arg RPB "$REALITY_PUB" --arg SID "$REALITY_SID" \
   --arg HY2 "$HY2_PWD" --arg HY22 "$HY2_PWD2" --arg HY2O "$HY2_OBFS_PWD" \
   --arg GRPC "$GRPC_SERVICE" --arg VMWS "$VMESS_WS_PATH" --arg CRT "$CRT" --arg KEY "$KEY" \
@@ -840,37 +844,36 @@ write_config(){
   --argjson PW4 "$PORT_HY2_W" --argjson PW5 "$PORT_VMESS_WS_W" --argjson PW6 "$PORT_HY2_OBFS_W" \
   --argjson PW7 "$PORT_SS2022_W" --argjson PW8 "$PORT_SS_W" --argjson PW9 "$PORT_TUIC_W" \
   --arg ENABLE_WARP "$ENABLE_WARP" \
-  --arg WPRIV "${WARP_PRIVATE_KEY:-}" --arg WPPUB "${WARP_PEER_PUBLIC_KEY:-}" \
-  --arg WHOST "${WARP_ENDPOINT_HOST:-}" --argjson WPORT "${WARP_ENDPOINT_PORT:-0}" \
-  --arg W4 "${WARP_ADDRESS_V4:-}" --arg W6 "${WARP_ADDRESS_V6:-}" \
-  --argjson WR1 "${WARP_RESERVED_1:-0}" --argjson WR2 "${WARP_RESERVED_2:-0}" --argjson WR3 "${WARP_RESERVED_3:-0}" \
   '
   def inbound_vless($port): {type:"vless", listen:"::", listen_port:$port, users:[{uuid:$UID}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
   def inbound_vless_flow($port): {type:"vless", listen:"::", listen_port:$port, users:[{uuid:$UID, flow:"xtls-rprx-vision"}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
   def inbound_trojan($port): {type:"trojan", listen:"::", listen_port:$port, users:[{password:$UID}], tls:{enabled:true, server_name:$RS, reality:{enabled:true, handshake:{server:$RS, server_port:$RSP}, private_key:$RPR, short_id:[$SID]}}};
-  def inbound_hy2($port): {type:"hysteria2", listen:"::", listen_port:$port, users:[{name:"hy2", password:$HY2}], tls:{enabled:true, certificate_path:$CRT, key_path:$KEY}};
+  def inbound_hy2($port, $pwd): {type:"hysteria2", listen:"::", listen_port:$port, users:[{password:$pwd}], tls:{enabled:true, certificate_path:$CRT, key_path:$KEY}};
   def inbound_vmess_ws($port): {type:"vmess", listen:"::", listen_port:$port, users:[{uuid:$UID}], transport:{type:"ws", path:$VMWS}};
-  def inbound_hy2_obfs($port): {type:"hysteria2", listen:"::", listen_port:$port, users:[{name:"hy2", password:$HY22}], obfs:{type:"salamander", password:$HY2O}, tls:{enabled:true, certificate_path:$CRT, key_path:$KEY, alpn:["h3"]}};
+  def inbound_hy2_obfs($port, $pwd, $obfs): {type:"hysteria2", listen:"::", listen_port:$port, users:[{password:$pwd}], obfs:{type:"salamander", password:$obfs}, tls:{enabled:true, certificate_path:$CRT, key_path:$KEY, alpn:["h3"]}};
   def inbound_ss2022($port): {type:"shadowsocks", listen:"::", listen_port:$port, method:"2022-blake3-aes-256-gcm", password:$SS2022};
   def inbound_ss($port): {type:"shadowsocks", listen:"::", listen_port:$port, method:"aes-256-gcm", password:$SSPWD};
   def inbound_tuic($port): {type:"tuic", listen:"::", listen_port:$port, users:[{uuid:$TUICUUID, password:$TUICPWD}], congestion_control:"bbr", tls:{enabled:true, certificate_path:$CRT, key_path:$KEY, alpn:["h3"]}};
 
-  def warp_outbound:
-    {type:"socks", tag:"warp", server:$WSHOST, server_port:$WSPORT};
-
-  def gemini_outbound:
-    {type:"socks", tag:"gemini-fix", server:"127.0.0.1", server_port:1122};
+  def warp_outbound: {type:"socks", tag:"warp", server:$WSHOST, server_port:$WSPORT};
+  def gemini_outbound: {type:"socks", tag:"gemini-fix", server:"127.0.0.1", server_port:$GPORT};
 
   {
     log:{level:"info", timestamp:true},
-    dns:{ servers:[ {tag:"dns-remote", address:"https://1.1.1.1/dns-query", detour:"direct"}, {address:"tls://dns.google", detour:"direct"} ], strategy:"prefer_ipv4" },
+    dns:{ 
+      servers:[ 
+        {tag:"dns-remote", address:"https://1.1.1.1/dns-query", detour:"gemini-fix"}, 
+        {address:"tls://dns.google", detour:"direct"} 
+      ], 
+      strategy:"prefer_ipv4" 
+    },
     inbounds:[
       (inbound_vless_flow($P1) + {tag:"vless-reality"}),
       (inbound_vless($P2) + {tag:"vless-grpcr", transport:{type:"grpc", service_name:$GRPC}}),
       (inbound_trojan($P3) + {tag:"trojan-reality"}),
-      (inbound_hy2($P4) + {tag:"hy2"}),
+      (inbound_hy2($P4, $HY2) + {tag:"hy2"}),
       (inbound_vmess_ws($P5) + {tag:"vmess-ws"}),
-      (inbound_hy2_obfs($P6) + {tag:"hy2-obfs"}),
+      (inbound_hy2_obfs($P6, $HY22, $HY2O) + {tag:"hy2-obfs"}),
       (inbound_ss2022($P7) + {tag:"ss2022"}),
       (inbound_ss($P8) + {tag:"ss"}),
       (inbound_tuic($P9) + {tag:"tuic-v5"}),
@@ -878,41 +881,45 @@ write_config(){
       (inbound_vless_flow($PW1) + {tag:"vless-reality-warp"}),
       (inbound_vless($PW2) + {tag:"vless-grpcr-warp", transport:{type:"grpc", service_name:$GRPC}}),
       (inbound_trojan($PW3) + {tag:"trojan-reality-warp"}),
-      (inbound_hy2($PW4) + {tag:"hy2-warp"}),
+      (inbound_hy2($PW4, $HY2) + {tag:"hy2-warp"}),
       (inbound_vmess_ws($PW5) + {tag:"vmess-ws-warp"}),
-      (inbound_hy2_obfs($PW6) + {tag:"hy2-obfs-warp"}),
+      (inbound_hy2_obfs($PW6, $HY22, $HY2O) + {tag:"hy2-obfs-warp"}),
       (inbound_ss2022($PW7) + {tag:"ss2022-warp"}),
       (inbound_ss($PW8) + {tag:"ss-warp"}),
       (inbound_tuic($PW9) + {tag:"tuic-v5-warp"})
     ],
-	outbounds: (
-      if $ENABLE_WARP=="true" and ($WPRIV|length)>0 and ($WHOST|length)>0 then
-        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}, warp_outbound, gemini_outbound] # 这里加了 gemini_outbound
-      else
-        [{type:"direct", tag:"direct"}, {type:"block", tag:"block"}, gemini_outbound] # 这里也加上，确保万无一失
-      end
-    ),
-    route: (
-      if $ENABLE_WARP=="true" and ($WPRIV|length)>0 and ($WHOST|length)>0 then
-		{ default_domain_resolver:"dns-remote", rules:[
-					{ 
-					  "domain": [
-						"generativelanguage.googleapis.com", 
-						"palm.googleapis.com",
-						"gemini.google.com",
-						"proactivebackend-pa.googleapis.com",
-						"google-api-soft-token-helper.googleapis.com"
-					  ], 
-					  "outbound": "gemini-fix" 
-					},
-					{ inbound: ["vless-reality-warp", ...], outbound:"warp" }
-				  ],
-          final:"direct"
+    outbounds: [
+      {type:"direct", tag:"direct"}, 
+      {type:"block", tag:"block"}, 
+      warp_outbound, 
+      gemini_outbound
+    ],
+    route: { 
+      default_domain_resolver:"dns-remote", 
+      rules:[
+        { 
+          "domain": [
+            "generativelanguage.googleapis.com", 
+            "palm.googleapis.com",
+            "gemini.google.com",
+            "proactivebackend-pa.googleapis.com",
+            "google-api-soft-token-helper.googleapis.com",
+            "googleai.googleapis.com"
+          ], 
+          "outbound": "gemini-fix" 
+        },
+        { "domain_keyword": ["generativelanguage", "gemini"], "outbound": "gemini-fix" },
+        { 
+          inbound: [
+            "vless-reality-warp", "vless-grpcr-warp", "trojan-reality-warp",
+            "hy2-warp", "vmess-ws-warp", "hy2-obfs-warp",
+            "ss2022-warp", "ss-warp", "tuic-v5-warp"
+          ], 
+          outbound:"warp" 
         }
-      else
-        { final:"direct" }
-      end
-    )
+      ],
+      final:"direct"
+    }
   }' > "$CONF_JSON"
   save_env
 }
